@@ -11,7 +11,7 @@ export NUM_RELAYS="$(bashio::config 'num_relays')"
 export BASE_TOPIC="$(bashio::config 'base_topic')"
 export DEVICE_NAME="$(bashio::config 'device_name')"
 export POLL_INTERVAL="$(bashio::config 'poll_interval')"
-export I2C_ADDRESSES="$(bashio::config 'i2c_addresses | join(\",\")')"
+export I2C_ADDRESSES="$(bashio::jq /data/options.json '.i2c_addresses | join(",")')"
 
 bashio::log.info "Starting DockerPi Relay bridge on bus ${I2C_BUS}, addrs=${I2C_ADDRESSES}"
 exec python3 -u /relay.py
