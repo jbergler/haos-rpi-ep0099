@@ -1,0 +1,35 @@
+name: DockerPi Relay (EP-0099)
+version: "0.1.0"
+slug: dockerpi_relay
+description: Expose a 52Pi / GeeekPi DockerPi 4-channel I2C relay HAT (EP-0099) to Home Assistant via MQTT discovery.
+arch:
+  - aarch64
+  - armv7
+  - armhf
+startup: services
+boot: auto
+init: false
+host_network: false
+hassio_api: false
+services:
+  - mqtt:need
+devices:
+  - /dev/i2c-1:/dev/i2c-1:rwm
+privileged:
+  - SYS_RAWIO
+options:
+  i2c_bus: 1
+  i2c_addresses:
+    - "0x10"
+  num_relays: 4
+  base_topic: dockerpi_relay
+  device_name: DockerPi Relay
+  poll_interval: 0
+schema:
+  i2c_bus: int(0,10)
+  i2c_addresses:
+    - str
+  num_relays: int(1,8)
+  base_topic: str
+  device_name: str
+  poll_interval: int(0,3600)
