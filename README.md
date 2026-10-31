@@ -48,23 +48,51 @@ Manual (local add-on, no GitHub needed):
 
 ## Options
 
-| Key              | Default            | Notes                                         |
-| ---------------- | ------------------ | --------------------------------------------- |
-| `i2c_bus`        | `1`                | `/dev/i2c-1`                                  |
-| `i2c_addresses`  | `["0x10"]`         | Add more entries for stacked boards (0x11…). |
-| `num_relays`     | `4`                | Channels per board.                           |
-| `base_topic`     | `dockerpi_relay`   | MQTT topic root.                              |
-| `device_name`    | `DockerPi Relay`   | Shown in HA device registry.                  |
-| `poll_interval`  | `0`                | Seconds; `>0` re-publishes retained state.    |
+Ships with a default `relays:` list for a single HAT at `0x10` (channels 1–4,
+normally-open wiring). Edit it in the add-on's **Configuration** tab.
+
+| Key              | Default            | Notes                                                                 |
+| ---------------- | ------------------ | --------------------------------------------------------------------- |
+| `i2c_bus`        | `1`                | `/dev/i2c-1`                                                          |
+| `base_topic`     | `dockerpi_relay`   | MQTT topic root.                                                      |
+| `device_name`    | `DockerPi Relay`   | Shown in HA device registry.                                          |
+| `startup_state`  | `restore`          | `restore` / `off` / `on`. See **Behaviour**.                          |
+| `poll_interval`  | `0`                | Seconds; `>0` re-publishes retained state (recovers from broker wipe).|
+| `relays[]`       | 4× `0x10` ch 1–4   | One entry per channel. `name` and `wiring` optional.                  |
+
+Each `relays[]` entry:
+
+| Field     | Required | Values                                           |
+| --------- | -------- | ------------------------------------------------ |
+| `address` | yes      | `0x10` / `0x11` / `0x12` / `0x13` (DIP-selected) |
+| `channel` | yes      | `1`–`4`                                          |
+| `name`    | no       | Entity name in HA (default `Relay <n>`).         |
+| `wiring`  | no       | `normally_open` (default) or `normally_closed`.  |
+
+Stacked boards: add more entries (e.g. `address: "0x11"`, `channel: 1`). Names
+then default to `Relay 0x11/1` form to disambiguate.
+
+`wiring: normally_closed` inverts the I²C write so HA **ON** always means
+"load energised", regardless of which contact the load is wired through.
 
 ## Behaviour
 
-- On startup every relay is forced **OFF** so cached state matches hardware
-  (the chip has no readback).
-- MQTT LWT publishes `offline` to `<base_topic>/availability` if the add-on
-  dies; entities go unavailable in HA.
-- Discovery topics are retained, so a Mosquitto restart re-populates entities
-  without restarting the add-on.
+- **Startup (`restore`, default).** On the first MQTT connect, the add-on
+  subscribes to its own state topics, waits up to 2 s for the broker to
+  replay retained state, and writes it to the chip. Hardware ends up
+  matching Home Assistant's last known intent across both cold reboots
+  (chip reset by power loss) and warm restarts (chip kept its state, our
+  cache was lost).
+- **Startup (`off` / `on`).** Skip restore; force every channel to that
+  state. Use `off` for safety-critical loads where "state uncertain after
+  power event → treat as off" is the requirement.
+- **Reconnect.** If Mosquitto bounces, the add-on only re-publishes
+  availability + current cached state; it does **not** re-restore from
+  retained (hardware already matches our cache).
+- **Availability.** MQTT LWT publishes `offline` to `<base_topic>/availability`
+  if the add-on crashes; entities go unavailable in HA.
+- **Discovery.** Topics are retained, so a Mosquitto restart re-populates
+  entities without restarting the add-on.
 
 ## Troubleshooting
 
@@ -72,7 +100,7 @@ Manual (local add-on, no GitHub needed):
   seated wrong.
 - Entities appear but toggling does nothing → check add-on log for
   `I2C write failed`; usually DIP switches put the board on a different
-  address, add it to `i2c_addresses`.
-- `MQTT connect failed` → the Mosquitto add-on isn't running, or the MQTT
-  integration hasn't been configured in HA (needed so the Supervisor advertises
-  the service).
+  address — fix the `address` field on that `relays[]` entry.
+- `MQTT connect failed` → Mosquitto add-on not running, or the MQTT
+  integration hasn't been configured in HA (needed so Supervisor advertises
+  the service to the add-on).

@@ -57,35 +57,42 @@ def _parse_addr(raw: str) -> int:
 
 
 def build_relays(opts: dict, base_topic: str) -> list[Relay]:
-    addresses = [_parse_addr(a) for a in opts["i2c_addresses"]]
-    channels = int(opts["num_relays"])
-    overrides: dict[tuple[int, int], dict] = {}
-    for entry in opts.get("relays") or []:
-        key = (_parse_addr(entry["address"]), int(entry["channel"]))
-        overrides[key] = entry
+    entries = opts.get("relays") or []
+    if not entries:
+        raise ValueError("options.relays is empty; declare at least one channel")
 
-    multi = len(addresses) > 1
+    # Decide whether to disambiguate names/topics by address: only if more
+    # than one distinct address is in play.
+    addr_set = {_parse_addr(e["address"]) for e in entries}
+    multi = len(addr_set) > 1
+
+    seen: set[tuple[int, int]] = set()
     relays: list[Relay] = []
-    for addr in addresses:
-        for ch in range(1, channels + 1):
-            o = overrides.get((addr, ch), {})
-            default_name = f"Relay {addr:#04x}/{ch}" if multi else f"Relay {ch}"
-            name = o.get("name") or default_name
-            wiring = (o.get("wiring") or "normally_open").lower()
-            invert = wiring == "normally_closed"
-            tag = f"{addr:02x}_{ch}" if multi else f"{ch}"
-            unique = f"dockerpi_relay_{addr:02x}_{ch}"
-            relays.append(
-                Relay(
-                    board_addr=addr,
-                    channel=ch,
-                    name=name,
-                    invert=invert,
-                    unique_id=unique,
-                    cmd_topic=f"{base_topic}/{tag}/set",
-                    stat_topic=f"{base_topic}/{tag}/state",
-                )
+    for e in entries:
+        addr = _parse_addr(e["address"])
+        ch = int(e["channel"])
+        key = (addr, ch)
+        if key in seen:
+            raise ValueError(f"duplicate relay entry for 0x{addr:02x} ch={ch}")
+        seen.add(key)
+
+        default_name = f"Relay {addr:#04x}/{ch}" if multi else f"Relay {ch}"
+        name = (e.get("name") or default_name).strip() or default_name
+        wiring = (e.get("wiring") or "normally_open").lower()
+        invert = wiring == "normally_closed"
+        tag = f"{addr:02x}_{ch}" if multi else f"{ch}"
+        unique = f"dockerpi_relay_{addr:02x}_{ch}"
+        relays.append(
+            Relay(
+                board_addr=addr,
+                channel=ch,
+                name=name,
+                invert=invert,
+                unique_id=unique,
+                cmd_topic=f"{base_topic}/{tag}/set",
+                stat_topic=f"{base_topic}/{tag}/state",
             )
+        )
     return relays
 
 

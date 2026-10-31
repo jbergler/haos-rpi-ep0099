@@ -1,0 +1,31 @@
+configuration:
+  i2c_bus:
+    name: I²C bus
+    description: Raspberry Pi I²C bus number. Almost always 1.
+  base_topic:
+    name: MQTT base topic
+    description: >
+      Topic root for command/state/availability. Change only if you have
+      multiple bridges on the same broker.
+  device_name:
+    name: Device name in Home Assistant
+    description: Label for the device entry grouping all relay entities.
+  startup_state:
+    name: Startup state
+    description: >
+      restore: on first MQTT connect, read retained state and write it to
+      the chip so hardware matches HA's last known intent (recommended).
+      off / on: force every channel OFF or ON on startup, ignoring retained.
+  poll_interval:
+    name: State republish interval (seconds)
+    description: >
+      0 disables. If set, retained state topics are re-published this often
+      to recover from a broker that lost its retained store.
+  relays:
+    name: Relays
+    description: >
+      One entry per physical channel to expose. The defaults list all 4
+      channels of a single HAT at 0x10. Add entries for stacked boards
+      (0x11 / 0x12 / 0x13), remove entries for unused channels, or set
+      wiring=normally_closed per channel so Home Assistant "on" always
+      means "load energised".
