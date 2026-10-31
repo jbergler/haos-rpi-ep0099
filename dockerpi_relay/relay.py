@@ -108,7 +108,7 @@ class RelayBank:
         self._lock = threading.Lock()
         self._state: dict[tuple[int, int], bool] = {}
 
-    def write(self, relay: Relay, logical_on: bool) -> bool:
+    def write(self, relay: Relay, logical_on: bool, *, reason: str) -> bool:
         # logical_on is what HA sees. XOR with invert for the chip.
         chip_on = logical_on ^ relay.invert
         byte = 0xFF if chip_on else 0x00
@@ -116,11 +116,14 @@ class RelayBank:
             with self._lock:
                 self._bus.write_byte_data(relay.board_addr, relay.register, byte)
                 self._state[(relay.board_addr, relay.channel)] = logical_on
-            return True
         except OSError as exc:
-            LOG.error("I2C write failed addr=0x%02x ch=%d: %s",
-                      relay.board_addr, relay.channel, exc)
+            LOG.error("relay %s (0x%02x/%d) write FAILED: %s (reason=%s)",
+                      relay.name, relay.board_addr, relay.channel, exc, reason)
             return False
+        LOG.info("relay %s (0x%02x/%d) -> %s (chip=0x%02x, reason=%s)",
+                 relay.name, relay.board_addr, relay.channel,
+                 "ON" if logical_on else "OFF", byte, reason)
+        return True
 
     def get(self, relay: Relay) -> bool:
         return self._state.get((relay.board_addr, relay.channel), False)
@@ -222,17 +225,13 @@ class Bridge:
             pending = dict(self._restore_pending)
         for r, desired in pending.items():
             logical = bool(desired)  # None -> False (safe default)
-            self.bank.write(r, logical)
             src = "retained" if desired is not None else "default-off"
-            LOG.info("restore %s ch=%d addr=0x%02x -> %s (%s, invert=%s)",
-                     r.name, r.channel, r.board_addr,
-                     "ON" if logical else "OFF", src, r.invert)
+            self.bank.write(r, logical, reason=f"restore:{src}")
 
     def _force_all(self, logical_on: bool) -> None:
+        reason = f"startup_state={self.startup_state}"
         for r in self.relays:
-            self.bank.write(r, logical_on)
-        LOG.info("startup_state=%s: forced all channels %s",
-                 self.startup_state, "ON" if logical_on else "OFF")
+            self.bank.write(r, logical_on, reason=reason)
 
     def _first_connect(self) -> None:
         if self.startup_state == "restore":
@@ -289,7 +288,7 @@ class Bridge:
             LOG.warning("ignoring payload %r on %s", payload, msg.topic)
             return
         logical = (payload == "ON")
-        if self.bank.write(r, logical):
+        if self.bank.write(r, logical, reason="mqtt command"):
             self.client.publish(r.stat_topic, payload, qos=1, retain=True)
 
 
@@ -307,7 +306,6 @@ def main() -> int:
     if startup_state not in ("restore", "on", "off"):
         LOG.warning("unknown startup_state %r, falling back to 'restore'", startup_state)
         startup_state = "restore"
-    poll_interval = int(opts.get("poll_interval", 0))
     bus_no = int(opts.get("i2c_bus", 1))
 
     relays = build_relays(opts, base_topic)
@@ -356,11 +354,7 @@ def main() -> int:
     client.loop_start()
     try:
         while not stop.is_set():
-            if poll_interval > 0 and bridge._restored:
-                bridge.publish_cached_state()
-                stop.wait(poll_interval)
-            else:
-                stop.wait(1.0)
+            stop.wait(1.0)
     finally:
         client.loop_stop()
         client.disconnect()

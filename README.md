@@ -57,7 +57,6 @@ normally-open wiring). Edit it in the add-on's **Configuration** tab.
 | `base_topic`     | `dockerpi_relay`   | MQTT topic root.                                                      |
 | `device_name`    | `DockerPi Relay`   | Shown in HA device registry.                                          |
 | `startup_state`  | `restore`          | `restore` / `off` / `on`. See **Behaviour**.                          |
-| `poll_interval`  | `0`                | Seconds; `>0` re-publishes retained state (recovers from broker wipe).|
 | `relays[]`       | 4× `0x10` ch 1–4   | One entry per channel. `name` and `wiring` optional.                  |
 
 Each `relays[]` entry:

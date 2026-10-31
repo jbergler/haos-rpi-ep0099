@@ -16,11 +16,6 @@ configuration:
       restore: on first MQTT connect, read retained state and write it to
       the chip so hardware matches HA's last known intent (recommended).
       off / on: force every channel OFF or ON on startup, ignoring retained.
-  poll_interval:
-    name: State republish interval (seconds)
-    description: >
-      0 disables. If set, retained state topics are re-published this often
-      to recover from a broker that lost its retained store.
   relays:
     name: Relays
     description: >
