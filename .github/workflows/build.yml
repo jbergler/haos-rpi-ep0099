@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [aarch64, armv7, armhf]
+        arch: [aarch64, armv7]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,5 +30,6 @@ jobs:
           args: |
             --${{ matrix.arch }} \
             --target /data/dockerpi_relay \
+            --image "{arch}-dockerpi-relay" \
             --test \
             --docker-hub local

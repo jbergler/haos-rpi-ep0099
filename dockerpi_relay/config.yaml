@@ -5,7 +5,6 @@ description: Expose a 52Pi / GeeekPi DockerPi 4-channel I2C relay HAT (EP-0099) 
 arch:
   - aarch64
   - armv7
-  - armhf
 startup: services
 boot: auto
 init: false
