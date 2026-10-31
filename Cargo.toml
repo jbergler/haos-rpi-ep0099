@@ -1,0 +1,33 @@
+[package]
+name = "dockerpi-relay"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.75"
+publish = false
+license = "MIT"
+
+[[bin]]
+name = "dockerpi-relay"
+path = "src/main.rs"
+
+[dependencies]
+# MQTT: sync client, no TLS (plaintext to local Mosquitto only).
+rumqttc = { version = "0.24", default-features = false }
+# Linux I2C via /dev/i2c-*.
+i2cdev = "0.6"
+# JSON for options and MQTT discovery payloads.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# HTTP for Supervisor API (http://supervisor, no TLS).
+ureq = { version = "2", default-features = false, features = ["json"] }
+anyhow = "1"
+log = "0.4"
+env_logger = { version = "0.11", default-features = false, features = ["humantime"] }
+ctrlc = { version = "3", features = ["termination"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

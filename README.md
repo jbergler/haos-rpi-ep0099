@@ -4,6 +4,9 @@ Exposes the 52Pi / GeeekPi **DockerPi 4-channel I²C relay HAT** (`EP-0099`,
 default I²C address `0x10`) as native Home Assistant switches via MQTT
 discovery.
 
+Written in Rust, shipped as a ~5 MB `scratch` image via GHCR — no build
+step on your Pi.
+
 ## Hardware
 
 - Raspberry Pi 4B running Home Assistant OS.
@@ -26,25 +29,20 @@ discovery.
 
 ## Install the add-on
 
-Recommended (one-click): open the Home Assistant add-on store, **⋮ →
-Repositories**, paste this repo's URL, then install *DockerPi Relay (EP-0099)*
-from the new section.
+One click: open the Home Assistant add-on store, **⋮ → Repositories**,
+paste this repo's URL, then install *DockerPi Relay (EP-0099)*. Supervisor
+pulls the prebuilt image from GHCR (no on-device compile).
 
 [![Add repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fjbergler%2Fhaos-rpi-ep0099)
 
-Manual (local add-on, no GitHub needed):
+Prerequisites:
 
-1. Install the **Mosquitto broker** add-on, start it, and configure the **MQTT**
-   integration — the add-on auto-pulls credentials via the Supervisor services
-   API, no manual broker config needed.
-2. Install the **Samba share** or **SSH & Web Terminal** add-on so you can drop
-   files into `/addons`.
-3. Copy `dockerpi_relay/` from this repo to `/addons/dockerpi_relay/` on the Pi.
-4. In HA: **Settings → Add-ons → Add-on Store → ⋮ → Check for updates**. A
-   **Local add-ons** section appears with *DockerPi Relay (EP-0099)*.
-5. Install, leave options at defaults for a single HAT, **Start**. Four
-   `switch.relay_1`..`switch.relay_4` entities appear automatically under the
-   *DockerPi Relay* device.
+1. Install the **Mosquitto broker** add-on and start it.
+2. Configure the **MQTT** integration in Home Assistant — the add-on
+   auto-pulls broker credentials via the Supervisor services API, so no
+   manual broker config is needed in the add-on options.
+3. Install, start — four `switch.relay_1`..`switch.relay_4` entities appear
+   automatically under the *DockerPi Relay* device.
 
 ## Options
 

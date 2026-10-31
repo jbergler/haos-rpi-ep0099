@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to publish (without leading v)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/haos-rpi-ep0099
+
+jobs:
+  resolve:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: v
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            V="${{ github.event.inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          CFG=$(grep '^version:' dockerpi_relay/config.yaml | sed -E 's/version: *"?([^"]+)"?/\1/')
+          if [[ "$V" != "$CFG" ]]; then
+            echo "::error::tag/input version ($V) does not match dockerpi_relay/config.yaml version ($CFG)"
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "resolved version: $V"
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            target: aarch64-unknown-linux-musl
+            platform: linux/arm64
+          - arch: armv7
+            target: armv7-unknown-linux-musleabihf
+            platform: linux/arm/v7
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build release binary
+        run: cross build --release --target ${{ matrix.target }} --locked
+
+      - name: Stage build context
+        run: |
+          mkdir -p ctx
+          cp target/${{ matrix.target }}/release/dockerpi-relay ctx/dockerpi-relay
+          cp dockerpi_relay/Dockerfile ctx/Dockerfile
+          ls -lh ctx/
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build + push per-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: ctx
+          file: ctx/Dockerfile
+          platforms: ${{ matrix.platform }}
+          provenance: false
+          push: true
+          tags: ${{ env.IMAGE }}:${{ needs.resolve.outputs.version }}-${{ matrix.arch }}
+
+  manifest:
+    name: Multi-arch manifest
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create manifest
+        run: |
+          V="${{ needs.resolve.outputs.version }}"
+          docker buildx imagetools create \
+            --tag "${{ env.IMAGE }}:$V" \
+            "${{ env.IMAGE }}:$V-aarch64" \
+            "${{ env.IMAGE }}:$V-armv7"
+      - name: Inspect
+        run: docker buildx imagetools inspect "${{ env.IMAGE }}:${{ needs.resolve.outputs.version }}"

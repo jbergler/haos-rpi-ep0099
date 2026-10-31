@@ -1,12 +1,18 @@
-ARG BUILD_FROM
-FROM $BUILD_FROM
+# Prebuilt image: GH Actions cross-compiles the static musl binary and
+# docker buildx assembles this image per arch. Supervisor pulls the
+# resulting multi-arch manifest via config.yaml `image:` so there is NO
+# build on the user's Pi.
+#
+# Expected build context contains a single file at ./dockerpi-relay
+# (the already-compiled musl binary for the target architecture).
 
-RUN apk add --no-cache python3 py3-pip i2c-tools \
- && pip3 install --no-cache-dir --break-system-packages \
-      smbus2==0.4.3 paho-mqtt==2.1.0
+FROM scratch
 
-COPY run.sh /run.sh
-COPY relay.py /relay.py
-RUN chmod a+x /run.sh
+LABEL org.opencontainers.image.title="Home Assistant Add-on: DockerPi Relay (EP-0099)"
+LABEL org.opencontainers.image.description="I2C relay HAT (EP-0099) bridge with MQTT discovery"
+LABEL org.opencontainers.image.source="https://github.com/jbergler/haos-rpi-ep0099"
+LABEL org.opencontainers.image.licenses="MIT"
 
-CMD ["/run.sh"]
+COPY dockerpi-relay /dockerpi-relay
+
+ENTRYPOINT ["/dockerpi-relay"]

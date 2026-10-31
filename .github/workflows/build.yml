@@ -1,35 +1,33 @@
-name: Build add-on
+name: Check
 
 on:
   push:
     branches: [main]
     paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "dockerpi_relay/**"
       - ".github/workflows/build.yml"
   pull_request:
     paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "dockerpi_relay/**"
       - ".github/workflows/build.yml"
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build ${{ matrix.arch }}
+  check:
+    name: cargo check (aarch64-musl)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [aarch64, armv7]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Build add-on
-        uses: home-assistant/builder@2024.08.2
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          args: |
-            --${{ matrix.arch }} \
-            --target /data/dockerpi_relay \
-            --image "{arch}-dockerpi-relay" \
-            --test \
-            --docker-hub local
+          targets: aarch64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --target aarch64-unknown-linux-musl --locked
+      - run: cargo fmt --check
+      - run: cargo clippy --target aarch64-unknown-linux-musl --locked -- -D warnings
