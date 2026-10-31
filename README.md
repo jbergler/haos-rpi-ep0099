@@ -92,6 +92,12 @@ then default to `Relay 0x11/1` form to disambiguate.
   if the add-on crashes; entities go unavailable in HA.
 - **Discovery.** Topics are retained, so a Mosquitto restart re-populates
   entities without restarting the add-on.
+- **Cleanup.** On startup the add-on scans `homeassistant/switch/+/config`
+  for retained discovery topics owned by this bridge (matched via
+  `device.identifiers`) and deletes any whose `unique_id` is no longer in
+  the current `relays:` list — removing a relay from the config also
+  removes its entity from Home Assistant. Discovery topics owned by other
+  devices or other bridge instances are left alone.
 
 ## Troubleshooting
 

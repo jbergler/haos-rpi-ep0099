@@ -151,6 +151,8 @@ class Bridge:
     _restored: bool = False
     _restore_pending: dict[Relay, bool | None] = field(default_factory=dict)
     _restore_lock: threading.Lock = field(default_factory=threading.Lock)
+    _cleanup_candidates: dict[str, dict] = field(default_factory=dict)
+    _cleanup_lock: threading.Lock = field(default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
         self.by_cmd = {r.cmd_topic: r for r in self.relays}
@@ -233,12 +235,72 @@ class Bridge:
         for r in self.relays:
             self.bank.write(r, logical_on, reason=reason)
 
+    # ---- Discovery cleanup (first connect only) -----------------------
+
+    @property
+    def _device_identifier(self) -> str:
+        return f"dockerpi_relay_{self.base_topic}"
+
+    @property
+    def _discovery_wildcard(self) -> str:
+        return f"{DISCOVERY_PREFIX}/switch/+/config"
+
+    def _begin_cleanup(self) -> None:
+        self._cleanup_candidates = {}
+        self.client.message_callback_add(self._discovery_wildcard, self._on_cleanup_msg)
+        self.client.subscribe(self._discovery_wildcard, qos=1)
+
+    def _on_cleanup_msg(self, _c, _ud, msg) -> None:
+        if not msg.payload:
+            return  # already-deleted marker; nothing to do
+        try:
+            payload = json.loads(msg.payload.decode(errors="replace"))
+        except (ValueError, UnicodeDecodeError):
+            return
+        ids = (payload.get("device") or {}).get("identifiers") or []
+        if self._device_identifier not in ids:
+            return  # belongs to another device
+        with self._cleanup_lock:
+            self._cleanup_candidates[msg.topic] = payload
+
+    def _finish_cleanup(self) -> None:
+        try:
+            self.client.unsubscribe(self._discovery_wildcard)
+            self.client.message_callback_remove(self._discovery_wildcard)
+        except Exception:
+            pass
+        current_ids = {r.unique_id for r in self.relays}
+        with self._cleanup_lock:
+            found = dict(self._cleanup_candidates)
+        removed = 0
+        for topic, payload in found.items():
+            uid = payload.get("unique_id") or ""
+            if uid in current_ids:
+                continue
+            # Delete the discovery config (empty retained payload) so HA drops
+            # the entity, and clear the stale state topic for the same reason.
+            self.client.publish(topic, "", qos=1, retain=True)
+            stat = payload.get("state_topic")
+            if stat:
+                self.client.publish(stat, "", qos=1, retain=True)
+            LOG.info("cleanup: removed stale entity %s (topic=%s)", uid, topic)
+            removed += 1
+        if removed == 0 and found:
+            LOG.info("cleanup: %d existing entities, all still configured", len(found))
+        elif removed:
+            LOG.info("cleanup: removed %d stale entity/entities", removed)
+
+    # ---- First connect / reconnect ------------------------------------
+
     def _first_connect(self) -> None:
+        # Cleanup + restore both subscribe to disjoint topic sets; collect in
+        # parallel to share one wait window.
+        self._begin_cleanup()
         if self.startup_state == "restore":
             self._begin_restore()
-            # Wait for retained messages to arrive (paho delivers them on the
-            # loop thread via _on_restore_msg).
-            time.sleep(RESTORE_WAIT_SEC)
+        time.sleep(RESTORE_WAIT_SEC)
+        self._finish_cleanup()
+        if self.startup_state == "restore":
             self._finish_restore()
         elif self.startup_state == "on":
             self._force_all(True)

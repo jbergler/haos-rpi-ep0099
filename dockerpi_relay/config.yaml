@@ -1,5 +1,5 @@
 name: DockerPi Relay (EP-0099)
-version: "0.1.4"
+version: "0.1.5"
 slug: dockerpi_relay
 description: Expose a 52Pi / GeeekPi DockerPi 4-channel I2C relay HAT (EP-0099) to Home Assistant via MQTT discovery.
 arch:
